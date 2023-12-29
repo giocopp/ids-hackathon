@@ -25,7 +25,7 @@ The Media Exposure and Opinion Formation (MEOF) study is a multi-wave panel surv
 - **Task 1.4** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.4.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.4.Rmd)
 - **Task 1.5** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.5.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.5.Rmd)
 - **Task 2 Code** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_2.code.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_2.code.Rmd)
-- - **Task 2 Report** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_2.report.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_2.report.Rmd)
+- **Task 2 Report** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_2.report.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_2.report.Rmd)
 
 ### Authors 
 
