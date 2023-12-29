@@ -1,0 +1,307 @@
+---
+title: |
+  Hackathon 2023 \
+  Task 1.2
+author: |
+  Author: Varvara Ilyina \
+  Email: v.ilyina@students.hertie-school.org \
+  Group: Armande Aboudrar-Meda, Giorgio Coppola, Giulia Petrilli, Luca Vellage
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    highlight: tango
+    number_sections: FALSE
+    theme: lumen
+    toc: TRUE
+    toc_depth: 3
+    toc_float: true
+---
+
+<style>
+div.answer {background-color:#f3f0ff; border-radius: 5px; padding: 20px;}
+</style>
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      error = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = NA)
+```
+
+***
+
+* Write a function to explore the distribution of answers for a given question on each of the survey waves.
+* The function should:
+  * take the data frame and survey item as arguments.
+  * return a small multiple barplot grouped at the survey wave-level with the answer
+  option counts (including NAs as a separate category).
+  * present the original survey question (label) and the variable name in the title of the plot, and the data source in a footnote below the plot.
+  * graph the value labels in the answer tick axis.
+  * have an additional argument that lets the user determine whether absolute numbers (counts) or relative shares (in % of respondents) are reported.
+  * stop if the input variable is not a labelled <dbl+lbl> type.
+* Prove the correct behavior of the function with at least three survey questions, highlighting that the arguments work as intended on (and only on) valid variable types.
+
+***
+
+## Setup
+
+### Import data
+```{r, include = TRUE}
+
+## load packages
+pacman::p_load(tidyverse, readr, haven, sjlabelled, RColorBrewer)
+
+## load survey data
+data_survey <- read_rds("./survey/meof_usa_survey_df.RDS")
+data_survey_factor <- read_rds("./survey/meof_usa_survey_df.RDS") %>% haven::as_factor()
+
+## load tracking data
+data_tracking <- read_rds("./tracking/meof_usa_web_df.RDS")
+
+```
+<br>
+
+### Specify open-ended variables
+```{r, echo = TRUE, results = 'asis'}
+
+## manually find open-ended vars
+open_vars <- c("mip", "mip2", "tolerance_list_prime_att_text", "hatelaw_frame_attention_check_text")
+
+## choose vars with many responses
+long_vars <- data.frame(
+  var_name = names(data_survey),
+  unique_counts = sapply(data_survey, function(x) length(unique(x)))
+) %>%
+  arrange(-unique_counts) %>%
+  filter(unique_counts > 400) %>%
+  pull(var_name)
+
+## vector with open-ended vars
+open_vars <- c(open_vars, long_vars)
+
+```
+<br>
+
+***
+
+## Generate function
+```{r, echo = TRUE}
+
+## write a super cool function
+super_cool_function <- function(df_input, var_input, share) {
+  
+  ## retrieve df
+  df_raw <- get(df_input)
+  
+  
+  ## check for correct df
+  if(df_input != "data_survey") {
+    stop(paste("This dataset cannot be used. Please select an appropriate dataset input."))
+  }
+  
+  
+  ## check if var in df
+  if(!var_input %in% names(df_raw)) {
+    stop(paste("The variable", var_input, "is not in the", df_input, "data frame."))
+  }
+  
+  
+  ## check if var is a discrete choice question
+  if(var_input %in% open_vars) {
+    stop(paste("The variable", var_input, "is not a discrete choice question."))
+  }
+  
+  
+  ## check class of var
+  var_type <- df_raw %>%
+    select(!!var_input) %>%
+    pull() %>%
+    class()
+  
+  
+  ## check if var is labelled and numeric
+  if(!any(c("haven_labelled", "double") %in% var_type)) {
+    stop(paste("The variable", var_input, "is not a labelled numeric variable of class 'dbl+lbl'."))
+  }
+  
+  
+  ## select needed vars
+  df_tmp <- df_raw %>%
+    select(wave, !!var_input) %>%
+    rename(resp_num = 2) %>%
+    mutate(resp_char = haven::as_factor(resp_num))
+  
+  
+  ## extract label for plot title
+  var_lab <- str_wrap(sjlabelled::get_label(df_tmp$resp_char), width = 65)
+  
+  
+  ## shorten title for `followsplot`
+  title_followspol <- "Do you follow what's going on in government and public affairs?"
+  
+  
+  ## write caption for plot
+  caption_dat <- "Data from the Media Exposure and Opinion Formation (MEOF) survey, \n conducted in 8 waves from April 2018 to October 2019 in the U.S."
+  
+  
+  ## clean variable
+  df_tmp <- df_tmp %>%
+    group_by(wave, resp_char) %>%
+    mutate(count = n()) %>%
+    ungroup() %>%
+    group_by(wave) %>%
+    mutate(resp_pct = count / length(resp_char) * 100,
+           resp_pct = round(resp_pct, 1),
+           #resp_char = haven::as_factor(resp_char),
+           resp_char = str_wrap(resp_char, 20),
+           wave = paste("Wave ", wave)) %>%
+    ungroup() %>%
+    unique()
+  
+  
+  ## plot
+  p <- ggplot(df_tmp, aes(reorder(resp_char, resp_num), count), fill = as.factor(resp_num)) +
+    geom_bar(stat = "identity", position = "dodge") + 
+    labs(
+      title = var_lab,
+      subtitle = str_c("'", var_input, "'"),
+      x = "",
+      y = "Number of Respondents",
+      caption = caption_dat
+    ) +
+    scale_y_continuous(limits = c(0, max(df_tmp$count)),
+                       breaks = seq(0, max(df_tmp$count + 100), by = 200)) +
+    facet_wrap(~wave, ncol = 4) +
+    theme_classic() +
+    theme(plot.title = element_text(size = 14),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 9))
+  
+  
+  ## plot with count labels
+  if(share == FALSE) {
+    
+    p <- p +
+      geom_text(aes(resp_char, count, label = count),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2)
+  }
+  
+  
+  ## plot with share labels
+  if(share == TRUE) {
+  
+    p <- p +
+      geom_text(aes(resp_char, count, label = str_c(resp_pct, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2)
+  }
+  
+  
+  ## adjust title for `followspol`
+  if(var_input == "followspol") {
+    
+    p <- p +
+    labs(title = title_followspol)
+  }
+  
+  
+  ## ouput plot
+  print(p)
+  
+}
+
+```
+<br>
+
+***
+
+## Test run!
+
+### Some trial and error..
+```{r, error=TRUE}
+
+#---- incorrect: `mip` ---------------------------------------------------------
+
+## specify values for function
+df_input <- "data_survey"
+var_input <- "mip"
+share <- TRUE
+
+
+## try function
+super_cool_function(df_input, var_input, share)
+
+
+#---- incorrect: `birth_year` --------------------------------------------------
+
+## specify values for function
+df_input <- "data_survey"
+var_input <- "birth_year"
+share <- TRUE
+
+
+## try function
+super_cool_function(df_input, var_input, share)
+
+
+#---- incorrect: `birthyr` -----------------------------------------------------
+
+## specify values for function
+df_input <- "data_survey"
+var_input <- "birthyr"
+share <- TRUE
+
+
+## try function
+super_cool_function(df_input, var_input, share)
+
+```
+<br>
+
+### ..but it works!
+```{r, echo = TRUE}
+
+#---- correct: impeach_trump ---------------------------------------------------
+
+## specify values for function
+df_input <- "data_survey"
+var_input <- "impeach_trump"
+share <- FALSE
+
+
+## try function
+super_cool_function(df_input, var_input, share)
+
+
+#---- correct: followspol ------------------------------------------------------
+
+## specify values for function
+df_input <- "data_survey"
+var_input <- "followspol"
+share <- TRUE
+
+
+## try function
+super_cool_function(df_input, var_input, share)
+
+
+#---- correct: political polarization ------------------------------------------
+
+## specify values for function
+df_input <- "data_survey"
+var_input <- "issue_political_polarization"
+share <- TRUE
+
+
+## try function
+super_cool_function(df_input, var_input, share)
+
+```
+
+
