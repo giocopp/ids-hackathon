@@ -18,6 +18,15 @@ Munzert, Simon, Barberá, Pablo, Guess, Andrew M., & Yang, JungHwan (2022). *Med
 
 The Media Exposure and Opinion Formation (MEOF) study is a multi-wave panel survey that was fielded between April 2018 and October 2019 in the United States. It was branded as “Politics & Media” survey ([doi:10.4232/1.13980](https://doi.org/10.4232/1.13980)). The survey makes it possible to investigate political attitudes and behaviors, knowledge, online media consumption, and various issue attitudes of US citizens. In addition to survey data, the panel used passive metering technology to collect real-time data on web visits and mobile app use (not part of this publication). A similar survey was fielded in Germany as “Politik & Medien” Survey between June 2017 and October 2019 (see ZA7894, [doi.org/10.4232/1.13979](http://dx.doi.org/10.4232/1.13979)). More information about the entire project is available at: [https://simonmunzert.github.io/meof](https://simonmunzert.github.io/meof).
 
+### Files
+- **Task 1.1** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.1.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.1.Rmd)
+- **Task 1.2** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.2.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.2.Rmd)
+- **Task 1.3** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.3.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.3.Rmd)
+- **Task 1.4** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.4.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.4.Rmd)
+- **Task 1.5** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_1.5.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_1.5.Rmd)
+- **Task 2 Code** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_2.code.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_2.code.Rmd)
+- - **Task 2 Report** [[.html]](https://raw.githack.com/giocopp/ids-hackathon/main/task_2.report.html) [[.Rmd]](https://github.com/giocopp/ids-hackathon/blob/main/task_2.report.Rmd)
+
 ### Authors 
 
 - Giorgio Coppola [E-Mail](g.coppola@students.hertie-school.org)
