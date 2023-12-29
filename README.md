@@ -6,7 +6,7 @@ This repository contains data and documentation for the hackathon project.
 
 ### Data 
 
-This repository comprises data from a survey conducted in the United States in 2018:
+This repository comprises work using data from a survey conducted in the United States in 2018:
 
 Guess, Andrew M.; Barberá, Pablo; Yang, JungHwan; Munzert, Simon (2022): *Media Exposure and Opinion Formation in an Age of Information Overload (MEOF) – Survey U.S.A.* GESIS Data Archive, Cologne. ZA7895 Data file Version 1.0.0, [doi:10.4232/1.13980](https://doi.org/10.4232/1.13980).
 
