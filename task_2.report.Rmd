@@ -1,0 +1,463 @@
+---
+title: "Hackathon Project - Task 2: Report"
+author: |
+  Author: [Armande Aboudrar-Meda](a.aboudrar-meda@students.hertie-school.org), [Giorgio Coppola](g.coppola@students.hertie-school.org), [Varvara Ilyina](v.ilyina@students.hertie-school.org), [Giulia Petrilli](g.petrilli@students.hertie-school.org), [Luca Vellage](l.Vellage@students.hertie-school.org)
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    highlight: tango
+    number_sections: no
+    theme: cosmo
+    toc: no
+  pdf_document:
+    toc: no
+---
+
+```{=html}
+<style>
+div.answer {background-color:#f3f0ff; border-radius: 5px; padding: 20px;}
+body {
+text-align: justify}
+</style>
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      error = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = NA)
+
+options(scipen = 999)
+```
+
+------------------------------------------------------------------------
+
+```{r, include = FALSE, echo = TRUE}
+## load packages
+pacman::p_load(tidyverse, readr, haven, gt)
+
+```
+
+
+# Clicks and Convictions  🌐
+
+<br>
+_**"Russia wants to meddle in midterm elections, intelligence officials say"**_ - ([FoxNews](#url4))
+
+<br>
+_**"Russians Tried, but Were Unable to Compromise Midterm Elections, U.S. Says"**_ - ([New York Times](#url5))
+
+<br>
+_**"Secretary of State Rex Tillerson: Russia is already trying to interfere in our midterm elections"**_ - ([Reddit / r/worldnews](#url6))
+
+<br>
+
+
+Reading this, would you be concerned about Russia interfering in the American midterm elections? While our opinions are certainly shaped by many different inputs, the news we consume can play a decisive role in this process. Especially major political events - such as elections - tend to increase the consumption of online websites ([Ray, 2023](#url3)) or social media ([Haugsgjerd & Karlsen, 2022](#url2)) as a source of political news. By consuming political news online, users often move within their own ecochambers - created by the types of news websites they visit and the users they interact with. 
+
+While it would be ambitious to draw a causal link between the news sources people visit and the opinions they hold, the statements above beg the question: **Is a higher threat perception of Russia related to the type of news US citizens consume?**
+
+To explore these patterns, this brief study uses data from the Media Exposure and Opinion Formation (MEOF) study ([Guess et al, 2022](#url1)), which contains a dataset of a multi-wave panel survey, investigating political and issue attitudes, behaviour, knowledge and online media consumption of US citizens. The MEOF study also contains a dataset on web visits and mobile app use of some of the survey participants. This study utilizes survey data on respondents' self-reported threat perception towards Russia and their online browsing behaviour in the same time period - namely, from October 30 to November 6, 2018, shortly before the US midterm elections. 
+
+#### **Analysis:**
+
+The MEOF survey asked respondents to assess their perception of several types of threats, including Russian interference in the US midterm elections. 
+
+```{r, include = FALSE, echo = TRUE}
+#Step 1: Getting Data
+## load survey data
+data_survey <- read_rds("./survey/meof_usa_survey_df.RDS")
+
+## load tracking data
+data_tracking <- readr::read_rds("./tracking/meof_usa_web_df.RDS")
+
+
+#Step 2: Preparing Dataset
+#Slim Tracking Dataset
+web_slim <- data_tracking |>  
+  select(personid, domain, duration) 
+
+#Slim survey dataset containing variables of interest
+survey_fourth_wave_RUS <- data_survey |> 
+  filter(wave == 4) |>
+  select(personid, gender, birthyr, race, educ, employ, faminc_new, religpew, presvote16post, threat_russia, knowevents4_russiaint_TRUE, feeling_russia) 
+
+#Merge data: Inner join to keep only respondents who provided tracking data and answered survey  
+merged_data_wavefour_RUS <- survey_fourth_wave_RUS |>
+  inner_join(web_slim, join_by(personid))
+
+#Step 3: Preparing Dataset 
+#Transform threat_russia as a dummy 
+merged_data_wavefour <- merged_data_wavefour_RUS |> 
+  #mutate(threat_russia = as.numeric(threat_russia)) |>
+  dplyr::filter(threat_russia == 4 | threat_russia == 1) |> 
+  dplyr::mutate(dummy_threat = ifelse(threat_russia == 4, 0, 1))
+
+
+#Step 4: Plot
+## vector with threat variables
+vars_threat <- data_survey %>%
+  select(starts_with("threat_")) %>%
+  names()
+
+
+## threat variable endings
+type_threat <- vars_threat %>%
+  str_extract("_[^_]+$")
+
+
+## vector with count variables
+count_threat <- paste0("count", type_threat)
+
+
+## vector with share variables
+share_threat <- paste0("share", type_threat)
+
+
+## vector with ggorder variables
+ggorder_threat <- paste0("ggorder", type_threat)
+
+
+## clean df for loop
+df_loop <- data_survey %>%
+  filter(wave == 4) %>%
+  select(personid, starts_with("threat_"))
+
+
+## loop across threat variables
+for (i in seq_along(vars_threat)) {
+  
+  df_tmp <- df_loop %>%
+    select(personid, vars_threat[i]) %>%
+    rename(threat_var = 2) %>%
+    group_by(threat_var) %>%
+    mutate(threat_var = as.numeric(threat_var),
+           count = n()) %>%
+    ungroup() %>%
+    group_by() %>%
+    mutate(share = count / length(threat_var) * 100,
+           share = round(share, 1)) %>%
+    ungroup() %>%
+    rename_with(~paste0("count", type_threat[i]), count) %>%
+    rename_with(~paste0("share", type_threat[i]), share) %>%
+    rename_with(~paste0("ggorder", type_threat[i]), threat_var)
+  
+  df_loop <- left_join(df_loop, df_tmp, by = "personid")
+  
+}
+
+
+## generate labels
+df_loop <- df_loop %>%
+  mutate(across(starts_with("threat_"), haven::as_factor)) %>%
+  mutate_at(vars(starts_with("threat_")),
+            ~ str_wrap(., width = 12)) %>%
+  select(-personid) %>%
+  unique()
+
+
+## generate caption
+caption_dat <- "Data from the Media Exposure and Opinion Formation (MEOF) survey, \n conducted between October 30 and November 6, 2018 (4th survey wave) in the United States"
+
+
+## plot
+p_ru <- df_loop %>%
+  select(ends_with("_russia")) %>%
+  unique() %>%
+  ggplot(.,  aes(reorder(threat_russia, -ggorder_russia), count_russia)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue4") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_russia)),
+                     breaks = seq(0, max(df_loop$count_russia + 150), by = 100)) +
+    labs(title = "Self-evaluated threat perception",
+         subtitle = "'threat_russia': How concerned are you about Russia interfering in the American midterm elections?",
+         x = "",
+         y = "Number of Respondents",
+         caption = caption_dat) +
+  geom_text(aes(threat_russia, count_russia, label = str_c(share_russia, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 3) +
+  theme_classic() +
+  theme(plot.subtitle = element_text(size = 10))
+```
+
+<br>
+
+```{r, fig.show="hold", out.width="75%", fig.align="center", warning=F, echo=F}
+
+# output plot
+print(p_ru)
+
+```
+
+<br>
+
+The respondents' self-evaluated threat perception of Russian election interference reveals a particularly stark polarization. 32.4% of participants report to be 'extremely concerned' (high threat group) about this issue, while 28.9% of participants report that they are 'not at all concerned' (low threat group). Considering the significant role media plays in opinion formation, an analysis of the respondents' online news consumption patterns is used to shed additional light on this divide.  
+
+
+
+**Online News Consumption** 
+
+The respondents' browsing behaviour dataset provides the basis for exploring patterns of online news consumption across the high and low threat groups. From the range of all visited websites during the surveying period, news websites were identified by using keyword matches - such as 'NYtimes' - in the domain names. Within both groups, the most frequently visited news sites were then identified based on the number of total accesses. 
+
+<br>
+
+```{r echo=FALSE, results='asis'}
+#Step 1: Analysis
+### data load and cleaning
+# web data
+web_data_slim <- data_tracking |>  
+  select(personid, domain, duration) 
+
+# survey data
+survey_data_slim <- data_survey |> 
+  filter(wave == 4) |> 
+  select(personid, gender, birthyr, race, educ, employ, faminc_new, religpew, presvote16post, threat_russia,  knowevents4_russiaint_TRUE,  feeling_russia) 
+
+### merge data and clean 
+# inner join to keep only respondents who provided tracking data and answered survey  
+join_survey_data <- survey_data_slim |> 
+  inner_join(web_data_slim, join_by(personid))  
+
+# filtered join data and dummy
+join_survey_data_threat <- join_survey_data |> 
+  filter(threat_russia == 4 | threat_russia == 1) |> 
+  mutate(dummy_threat = ifelse(threat_russia == 4, 0, 1)) |> 
+  filter(duration >= 30) # filter out web search that are less than 30 sec
+
+# check the counts for each dummy
+threat_counts <- join_survey_data_threat %>%
+  group_by(dummy_threat) %>%
+  summarize(count = n())
+
+# what's the top 10 domain?
+top_domains <- join_survey_data_threat  |> 
+  group_by(domain) |> 
+  summarise(count = n()) |>  
+  arrange(desc(count)) |> 
+  filter(row_number() <= 10) |> 
+  pull(domain) 
+
+# what are the unique domains at this stage?
+unique_domains_filt <- join_survey_data_threat |> 
+  pull(domain) |> 
+  unique() |> 
+  as_tibble()
+
+#Step 2 Analyis: Exploration 
+### exploration
+# creation of our categories based on the article referenced in the report 
+ left_news_keywords <- c("alternet", "theatlantic", "democracynow", "dailybeast",
+                         "huffpost", "theintercept", "jacobin", "motherjohns",
+                         "msnbc", "newyorker", "nytimes", "thenation", "vox", "slate")
+
+ leanleft_news_keywords <- c("abcnews", "apnews", "cbsnews", "cnn", "axios", "bloomberg",
+                             "theguardian", "insider", "npr", "politico", "propublica",
+                            "time", "washingtonpost", "usatoday", "news.yahoo")
+
+center_news_keywords <- c("bbc", "csmonitor", "forbes", "marketwatch", "newsnationnow",
+                          "newsweek", "reuters", "realclearpolitics", "thehill", "wsj")
+
+leanright_news_keywords <- c("thedispatch", "epochtimes", "foxbusiness", "nationalreview",
+                             "nypost", "reason", "washingtonexaminer", "washingtontimes")
+
+right_news_keywords <- c("theamericanconservative", "spectator", "breitbart", "theblaze",
+                         "cbn", "dailycaller", "dailymail", "dailywire", "thepostmillennial",
+                         "foxnews", "thefederalist", "ijr", "nationalreview", "nypost",
+                         "newsmax", "oann", "freebeacon")
+
+join_survey_data_threat_cat <- join_survey_data_threat %>%
+  mutate(category = case_when(
+    grepl(paste0(paste(left_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "left_news",
+    grepl(paste0(paste(leanleft_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "leanleft_news",
+    grepl(paste0(paste(center_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "center_news",
+    grepl(paste0(paste(leanright_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "leanright_news",
+    grepl(paste0(paste(right_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "right_news",
+    TRUE ~ NA_character_
+  ))
+
+#Step 3 Analysis: 
+left_news <- join_survey_data_threat_cat |> 
+  filter(category == "left_news") |> 
+  select(domain) |> 
+  unique()
+
+leanleft_news <- join_survey_data_threat_cat  |> 
+  filter(category == "leanleft_news")  |> 
+  select(domain) |> 
+  unique()
+
+center_news <- join_survey_data_threat_cat|> 
+  filter(category == "center_news") |> 
+  select(domain) |> 
+  unique()
+
+leanright_news <- join_survey_data_threat_cat |> 
+  filter(category == "leanright_news") |> 
+  select(domain) |> 
+  unique()
+
+right_news <- join_survey_data_threat_cat |> 
+  filter(category == "right_news") |> 
+  select(domain) |> 
+  unique()
+
+# We checked the domains grouped by the category, and we found 6 domains that are not news wesites: invox community, google translate, question pro, business insider, transformation insider and time.rmprod.zone. We want to delete them.
+
+# domains to change 
+domains_to_change <- c("univoxcommunity.com", "translate.google.com", "questionpro.com", "businessinsider.com", "transformationinsider.com", "time.rmprod.zone")
+
+join_survey_data_threat_cat_new <- join_survey_data_threat_cat %>%
+  mutate(category = ifelse(domain %in% domains_to_change, NA, category))
+
+
+# We need to filter our dataset only keeping the relevant web activities.
+combined_news <- bind_rows(
+  left_news,
+  leanleft_news,
+  center_news,
+  leanright_news,
+  right_news
+)
+
+join_survey_data_threat_cat_filt <- join_survey_data_threat_cat_new %>%
+  filter(domain %in% combined_news$domain)
+
+#Step 4: Tables
+
+# We now want to do a table to compare, within our online news, the 20 most visited online news websites by the perception of Russia as a threat
+domain_visits <- join_survey_data_threat_cat_filt %>%
+  filter(!is.na(category)) %>%
+  group_by(dummy_threat, domain, category) %>%
+  summarise(visit_count = n(), .groups = 'drop') %>%
+  arrange(dummy_threat, desc(visit_count))
+
+top_no_threat <- domain_visits %>%
+  filter(dummy_threat == 0) %>%
+  slice_head(n = 20)
+
+top_threat <- domain_visits %>%
+  filter(dummy_threat == 1) %>%
+  slice_head(n = 20)
+
+top_no_threat <- top_no_threat %>% 
+  mutate(Threat_Perception = "No Threat") %>% 
+  slice(1:10)
+
+top_threat <- top_threat %>% 
+  mutate(Threat_Perception = "Threat") %>% 
+  slice(1:10)
+
+# Combine the two dataframes
+combined_data <- bind_cols(top_no_threat, top_threat) %>%
+  select(Threat_Perception...5, domain...2, visit_count...4, Threat_Perception...10, domain...7, visit_count...9)
+
+# Now, create the gt table
+combined_table <- gt(combined_data) %>%
+  tab_header(
+    title = "Top 10 Online News Websites", 
+    subtitle = "Top 10 most frequently accessed news websites based on threat perception towards Russian election interference in the US midterms."
+  ) %>%
+ 
+  cols_label(Threat_Perception...5 = "Threat Perception: Low", 
+             Threat_Perception...10 = "Threat Perception: High", 
+             domain...2 = "Domain", 
+             domain...7 = "Domain", 
+             visit_count...4 = "Access Frequency",
+             visit_count...9 = "Access Frequency") %>%
+
+ tab_options(heading.subtitle.font.size = 12.5, 
+             column_labels.font.size = 12) %>%
+  
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")),
+    locations = cells_column_labels(columns = everything()))
+
+# Print the table
+print(combined_table)
+```
+<br>
+
+The comparison reveals that individuals with divergent threat perceptions, especially concerning Russian election interference, tend to consume somewhat different online news sources. A notable constant across both groups however is Fox News, which remains a frequently accessed channel regardless of the perceived threat level of Russian interference in the midterms. However, variations are evident in the popularity of other news sites. Respondents who are not concerned about Russian election interference, often visit sites like the Daily Mail and ProPublica, whereas those highly concerned about interference, frequently access CNN, The New York Times, and The Washington Post.
+
+**Media Bias**
+
+In order to better understand how news can play a role in shaping opinions, is is relevant to consider the potential political biases of media outlets. Therefore, all previously identified online news sites were classified into 'types' according to their political leaning based on the ([AllSides](#url7)) media bias chart. 
+
+<br>
+
+```{r, fig.show="hold", out.width="85%", fig.align="center", warning=F, echo=F}
+#Step 1: 
+visit_count <- join_survey_data_threat_cat_filt %>%
+  group_by(category, dummy_threat) %>%
+  summarise(visit_count = n(), .groups = "drop")
+
+visit_count_comparison <- visit_count %>%
+  pivot_wider(names_from = dummy_threat, values_from = visit_count) %>%
+  rename(`No Threat Perceived` = `0`, `High Threat Perceived` = `1`) %>%
+  select(category, `No Threat Perceived`, `High Threat Perceived`) %>%
+  arrange(category)
+
+long_format <-  visit_count_comparison |> 
+  pivot_longer(cols = c(`No Threat Perceived`, `High Threat Perceived`), 
+               names_to = "High Threat Perceived", values_to = "Count") |> 
+   filter(!is.na(category))
+
+long_format <- long_format |>  
+  mutate(ggorder = case_when(
+  category == "left_news" ~ 1,
+  category == "leanleft_news" ~ 2,
+  category == "center_news" ~ 3, 
+  category == "leanright_news" ~ 4,
+  category == "right_news" ~ 5,
+  TRUE ~ NA_real_))
+  
+# We create an histogram showing the visit count comparison by category and threat perception
+barplot <- ggplot(long_format, aes(x = reorder(category, ggorder), y = Count, fill = `High Threat Perceived`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("No Threat Perceived" = "steelblue2", "High Threat Perceived" = "steelblue4")) + # Custom colors 
+  scale_x_discrete(labels = c("left_news" = "Left", "leanleft_news" = "Lean Left", "center_news" = "Center", "leanright_news" = "Lean Right", "right_news" = "Right")) +  
+  theme_minimal() +
+  labs(title = "Consumption Level by Bias Category and Threat Perception",
+       subtitle = "Comparison: Consumption levels of different types of online news websites between \n threat perception groups.",
+       x = "Category",
+       y = "Visit Count",
+       fill = "Threat Perception") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+barplot
+```
+<br>
+
+Comparing the 'types' of online news sources that are consumed most frequently within the groups, reveals a more distinct observation. Specifically respondents who reported to be extremely concerned about Russian election interference in the US midterms, consumed more left-leaning news sites. Likewise, respondents who reported low levels of concern about Russian election interference visited more news-websites that were categorized as 'right'. 
+
+Certainly, it is not possible to infer from this exploratory study that threat perceptions, online media consumption and the political bias of media outlets strictly influence one another. Yet, the results point to the pattern that US citizens with different threat perceptions of Russian election interference also consume different types of online media, at least on an aggregate level. A central observation is hereby the tendency of US citizens with different threat perceptions to gravitate towards news sources with distinct political leanings. The interplay between political biases in news reporting and media consumption behavior must be further explored to fully understand their implications on public opinion formation. 
+
+#### **Future Thoughts:**
+
+Further research should thereby build on the limitations of this study. Specifically, future work should include additional variables for a robust measurement of US citizens' threat perception of Russia or include other issue areas too. Likewise, the measurement of consumption levels should be more granular, beyond the aggregate number of visits or total consumption duration per group. Moreover, using keywords such as 'NYTimes' to identify online news sources from the web browsing data can lead to inaccuracies, for example, by including domains that contain the keyword but are not the news source in question.  (for further information on the methodology, please read the code and accompanying explanation in 'Task 2 - Code.Rmd'). 
+
+
+------------------------------------------------------------------------
+
+#### **References**
+
+[AllSides]{#url7}. (2023). AllSides Media Bias Chart. AllSides. Retrieved December 20, 2023 from https://www.allsides.com/media-bias/media-bias-chart
+
+[FoxNews]{#url4}. (2018). Russia wants to meddle in midterm elections, intelligence officials say. Fox News. Retrieved December 19, 2023 from https://www.foxnews.com/politics/russia-wants-to-meddle-in-midterm-elections-intelligence-officials-say
+
+[Guess]{#url1}, A., Barberá, P., JungHwan, Y., & Munzert, S. (2022). Media Exposure and Opinion Formation in an Age of Information Overload (MEOF) – Survey U.S.A.. GESIS Data Archive, Cologne. ZA7895 Data file Version 1.0.0, doi:10.4232/1.13980
+
+[Haugsgjerd]{#url2}, A., & Karlsen, R. (2022). Election Campaigns, News Consumption Gaps, and Social Media: Equalizing Political News Use When It Matters?. The International Journal of Press/Politics. Retrieved December 19, 2023 from https://journals.sagepub.com/doi/epub/10.1177/19401612221112014
+
+[New York Times]{#url5}. (2018). Russians Tried, but Were Unable to Compromise Midterm Elections, U.S. Says. New York Times. Retrieved December 19, 2023 from https://www.nytimes.com/2018/12/21/us/politics/russia-midterm-election-influence-coates.html
+
+[Ray]{#url3}, R. (2023). Online news platforms still matter: generational news consumption patterns during the 2020 presidential election. Online Media and Global Communication, 2(3). Retrieved December 19, 2023 from https://www.degruyter.com/document/doi/10.1515/omgc-2023-0012/html
+
+[Reddit / r/worldnews]{#url6}. (2018). Secretary of State Rex Tillerson: Russia is already trying to interfere in our midterm elections. reddit. Retrieved December 19, 2023 from https://www.reddit.com/r/worldnews/comments/7vx123/secretary_of_state_rex_tillerson_russia_is/
+
