@@ -1,0 +1,579 @@
+---
+title: |
+  Hackathon 2023 \
+  Task 2: Code
+author: |
+  Group: hack \
+  Members: Armande Aboudrar-Meda, Giorgio Coppola, Varvara Ilyina, Giulia Petrilli, Luca Vellage
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    highlight: tango
+    number_sections: FALSE
+    theme: cosmo
+    toc: TRUE
+    toc_depth: 3
+    toc_float: true
+---
+
+<style>
+div.answer {background-color:#f3f0ff; border-radius: 5px; padding: 20px;}
+</style>
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      error = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = NA)
+```
+
+***
+
+## Setup
+```{r, echo = TRUE}
+## load packages
+pacman::p_load(tidyverse, leaflet, tigris, sf, haven, RColorBrewer)
+
+## load survey data
+data_survey <- read_rds("./survey/meof_usa_survey_df.RDS")
+
+## load tracking data
+data_tracking <- readr::read_rds("./tracking/meof_usa_web_df.RDS")
+
+```
+
+<br>
+
+------------------------------------------------------------------------
+
+## Data operationalization
+
+At first glance, the MEOF survey data seem quite large and difficult to work with. Navigating the data by hand felt like a tedious task, but after narrowing down our topic of interest, we were able to pick out some variables of interest. Further exploration of the data led us to limit our time frame to the fourth wave. 
+
+The comparison of certain variable outputs yielded fruitful results. The most interesting variables for our analysis were the self-evaluated threat perceptions on various items, determined by the range of `threat_` variables. 
+
+***
+
+### Self-perception of various threats
+
+As a first step, we plotted histograms of each of the `threat_` variables present in the survey data. Comparisons are done between threat perceptions of terrorist attacks, Russia's interference in US elections, a nuclear attack from North Korea, Iran's development of nuclear weapons, jobs being taken by undocumented immigrants and the loss of jobs to China.
+
+The exact shares of respondents per category can be deduced from the plot below. The responses range from (1) "Extremely concerned" to (4) "Not at all concerned". Most distributions depict a either a large share of respondents in the middle two categories (showing potential indecisiveness) or a strong preference towards one category.
+
+```{r, echo = TRUE}
+
+## vector with threat variables
+vars_threat <- data_survey %>%
+  select(starts_with("threat_")) %>%
+  names()
+
+## threat variable endings
+type_threat <- vars_threat %>%
+  str_extract("_[^_]+$")
+
+
+## vector with count variables
+count_threat <- paste0("count", type_threat)
+
+
+## vector with share variables
+share_threat <- paste0("share", type_threat)
+
+
+## vector with ggorder variables
+ggorder_threat <- paste0("ggorder", type_threat)
+
+
+## clean df for loop
+df_loop <- data_survey %>%
+  filter(wave == 4) %>%
+  select(personid, starts_with("threat_"))
+
+
+## loop across threat variables
+for (i in seq_along(vars_threat)) {
+  
+  df_tmp <- df_loop %>%
+    select(personid, vars_threat[i]) %>%
+    rename(threat_var = 2) %>%
+    group_by(threat_var) %>%
+    mutate(threat_var = as.numeric(threat_var),
+           count = n()) %>%
+    ungroup() %>%
+    group_by() %>%
+    mutate(share = count / length(threat_var) * 100,
+           share = round(share, 1)) %>%
+    ungroup() %>%
+    rename_with(~paste0("count", type_threat[i]), count) %>%
+    rename_with(~paste0("share", type_threat[i]), share) %>%
+    rename_with(~paste0("ggorder", type_threat[i]), threat_var)
+  
+  df_loop <- left_join(df_loop, df_tmp, by = "personid")
+  
+}
+
+
+## generate labels
+df_loop <- df_loop %>%
+  mutate(across(starts_with("threat_"), haven::as_factor)) %>%
+  mutate_at(vars(starts_with("threat_")),
+            ~ str_wrap(., width = 12)) %>%
+  select(-personid) %>%
+  unique()
+
+
+## generate caption
+caption_dat <- "Data from the Media Exposure and Opinion Formation (MEOF) survey, \n conducted between October 30 and November 6, 2018 (4th survey wave) in the United States"
+
+
+## prepare theme for plot
+stand_theme <- theme_classic() +
+  theme(plot.title = element_text(size = 10),
+        axis.title.y = element_text(vjust = 1, size = 9),
+        axis.text.y = element_text(size = 8),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        plot.subtitle = element_text(size = 21),
+        plot.caption = element_text(size = 6),
+        legend.title = element_blank())
+
+```
+
+
+```{r, fig.show="hold", out.width="85%", fig.align="center", warning=F, echo=F}
+
+## plots
+p_terrorist <- df_loop %>%
+  select(ends_with("_terrorist")) %>%
+  unique() %>%
+  ggplot(., aes(reorder(threat_terrorist, -ggorder_terrorist), count_terrorist)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue2") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_terrorist)),
+                       breaks = seq(0, max(df_loop$count_terrorist + 100), by = 200)) +
+  labs(title = "Terrorist attack",
+       x = "",
+       y = "Num. of Resp.",
+         caption = "") +
+  geom_text(aes(threat_terrorist, count_terrorist, label = str_c(share_terrorist, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2) +
+  stand_theme
+
+
+p_russia <- df_loop %>%
+  select(ends_with("_russia")) %>%
+  unique() %>%
+  ggplot(.,  aes(reorder(threat_russia, -ggorder_russia), count_russia)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue4") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_russia)),
+                       breaks = seq(0, max(df_loop$count_russia + 100), by = 200)) +
+    labs(title = "Russia interferes in elections",
+         x = "",
+         y = "Num. of Resp.",
+         caption = "") +
+  geom_text(aes(threat_russia, count_russia, label = str_c(share_russia, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2) +
+  stand_theme
+
+
+p_northkorea <- df_loop %>%
+  select(ends_with("_northkorea")) %>%
+  unique() %>%
+  ggplot(., aes(reorder(threat_northkorea, -ggorder_northkorea), count_northkorea)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue2") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_northkorea)),
+                       breaks = seq(0, max(df_loop$count_northkorea + 100), by = 200)) +
+    labs(title = "North Korea missiles",
+         x = "",
+         y = "Num. of Resp.",
+         caption = "") +
+  geom_text(aes(threat_northkorea, count_northkorea, label = str_c(share_northkorea, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2) +
+  stand_theme
+
+
+p_iran <- df_loop %>%
+  select(ends_with("_iran")) %>%
+  unique() %>%
+  ggplot(., aes(reorder(threat_iran, -ggorder_iran), count_iran)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue2") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_iran)),
+                       breaks = seq(0, max(df_loop$count_iran + 100), by = 200)) +
+    labs(title = "Iran's nuclear weapones",
+         x = "",
+         y = "Num. of Resp.",
+         caption = "") +
+  geom_text(aes(threat_iran, count_iran, label = str_c(share_iran, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2) +
+  stand_theme
+
+
+p_undocumented <- df_loop %>%
+  select(ends_with("_undocumented")) %>%
+  unique() %>%
+  ggplot(., aes(reorder(threat_undocumented, -ggorder_undocumented), count_undocumented)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue2") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_undocumented)),
+                     breaks = seq(0, max(df_loop$count_undocumented + 100), by = 200)) +
+    labs(title = "Lose jobs to undoc. immigrants",
+         x = "",
+         y = "Num. of Resp.",
+         caption = "") +
+  geom_text(aes(threat_undocumented, count_undocumented, label = str_c(share_undocumented, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2) +
+  stand_theme
+
+
+p_china <- df_loop %>%
+  select(ends_with("_china")) %>%
+  unique() %>%
+  ggplot(., aes(reorder(threat_china, -ggorder_china), count_china)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue2") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_china)),
+                       breaks = seq(0, max(df_loop$count_china + 200), by = 200)) +
+  labs(title = "Lose jobs to China",
+       x = "",
+       y = "Num. of Resp.",
+       caption = caption_dat) +
+  geom_text(aes(threat_china, count_china, label = str_c(share_china, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 2) +
+  stand_theme
+
+```
+
+
+```{r, fig.show="hold", out.width="85%", fig.align="center", warning=F, echo=T}
+
+## arrange plots
+gridExtra::grid.arrange(p_terrorist, p_russia, p_northkorea, p_iran, p_undocumented, p_china,
+                        nrow = 2,
+                        top = "Threat perceptions (using the `threat_` variable)")
+
+```
+<br>
+
+------------------------------------------------------------------------
+
+### Self-perception of a threat from Russia
+
+Nonetheless, there is an evident polarization in the threat evaluation of Russia interfering in the US midterm elections. Compared to the other five variables, the distribution of the self-evaluated threat perception from Russia is equally split between respondents. For this reason, we focus on the specific threat variable about Russia, in relation to the type of news consumed by US citizens.
+
+```{r, fig.show="hold", out.width="85%", fig.align="center", warning=F, echo=T}
+
+## plot
+p_russia <- df_loop %>%
+  select(ends_with("_russia")) %>%
+  unique() %>%
+  ggplot(.,  aes(reorder(threat_russia, -ggorder_russia), count_russia)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, fill = "steelblue4") +
+  scale_y_continuous(limits = c(0, max(df_loop$count_russia)),
+                     breaks = seq(0, max(df_loop$count_russia + 150), by = 100)) +
+    labs(title = "Self-evaluated threat perception",
+         subtitle = "'threat_russia': How concerned are you about Russia interfering in the American midterm elections?",
+         x = "",
+         y = "Number of Respondents",
+         caption = caption_dat) +
+  geom_text(aes(threat_russia, count_russia, label = str_c(share_russia, " %")),
+                position = position_dodge(0.9),
+                vjust = -0.5,
+                size = 3) +
+  theme_classic() + 
+  theme(plot.subtitle = element_text(size = 10))
+
+
+# output plot
+print(p_russia)
+```
+<br>
+
+------------------------------------------------------------------------
+
+## Analysis
+
+In the following chunks, we aimed at studying the different patterns of news online consumption based on the variable "threat_russia", defined as "Russia interfering in the American midterm elections". The respondents to the survey had 4 choice of answers : extremely concerned, very concerned, somewhat concerned, or not at all concerned, and there were also the possibilities for the question to be skipped or not asked. We chose in our analysis to keep our attention on "extremely concerned" and "not at all concerned" and to use the variable as a dummy or an operalization of seeing or not Russia as a threat. 
+
+To study the different patterns of consumption of information between the respondents seeing Russia as a threat or not, we first merged the two datasets and we then found a strategy to select the domains in our dataset that could be considered as online news consumption. We did our choice of online news consumotion based on an article (referenced in the report) which helped us to choose our domains and to put them in different political categories. We finally studied and compared the difference in the use of these selected online news between the two groups.
+
+
+```{r}
+### data load and cleaning
+# web data
+web_data_slim <- data_tracking |>  
+  select(personid, domain, duration) 
+
+# survey data
+survey_data_slim <- data_survey |> 
+  filter(wave == 4) |> 
+  select(personid, gender, birthyr, race, educ, employ, faminc_new, religpew, presvote16post, threat_russia,  knowevents4_russiaint_TRUE,  feeling_russia) 
+
+### merge data and clean 
+# inner join to keep only respondents who provided tracking data and answered survey  
+join_survey_data <- survey_data_slim |> 
+  inner_join(web_data_slim, join_by(personid))  
+
+# filtered join data and dummy
+join_survey_data_threat <- join_survey_data |> 
+  filter(threat_russia == 4 | threat_russia == 1) |> 
+  mutate(dummy_threat = ifelse(threat_russia == 4, 0, 1)) |> 
+  filter(duration >= 30) # filter out web search that are less than 30 sec
+
+# check the counts for each dummy
+threat_counts <- join_survey_data_threat %>%
+  group_by(dummy_threat) %>%
+  summarize(count = n())
+
+# what's the top 10 domain?
+top_domains <- join_survey_data_threat  |> 
+  group_by(domain) |> 
+  summarise(count = n()) |>  
+  arrange(desc(count)) |> 
+  filter(row_number() <= 10) |> 
+  pull(domain) 
+
+# what are the unique domains at this stage?
+unique_domains_filt <- join_survey_data_threat |> 
+  pull(domain) |> 
+  unique() |> 
+  as_tibble()
+```
+<br>
+
+------------------------------------------------------------------------
+
+### Conceptualization
+Conceptualization based on [AllSides Media Bias Chart, 2023]{https://www.allsides.com/media-bias/media-bias-chart}.
+
+```{r}
+
+# creation of our categories based on the article referenced in the report 
+ left_news_keywords <- c("alternet", "theatlantic", "democracynow", "dailybeast",
+                         "huffpost", "theintercept", "jacobin", "motherjohns",
+                         "msnbc", "newyorker", "nytimes", "thenation", "vox", "slate")
+
+ leanleft_news_keywords <- c("abcnews", "apnews", "cbsnews", "cnn", "axios", "bloomberg",
+                             "theguardian", "insider", "npr", "politico", "propublica",
+                            "time", "washingtonpost", "usatoday", "news.yahoo")
+
+center_news_keywords <- c("bbc", "csmonitor", "forbes", "marketwatch", "newsnationnow",
+                          "newsweek", "reuters", "realclearpolitics", "thehill", "wsj")
+
+leanright_news_keywords <- c("thedispatch", "epochtimes", "foxbusiness", "nationalreview",
+                             "nypost", "reason", "washingtonexaminer", "washingtontimes")
+
+right_news_keywords <- c("theamericanconservative", "spectator", "breitbart", "theblaze",
+                         "cbn", "dailycaller", "dailymail", "dailywire", "thepostmillennial",
+                         "foxnews", "thefederalist", "ijr", "nationalreview", "nypost",
+                         "newsmax", "oann", "freebeacon")
+
+join_survey_data_threat_cat <- join_survey_data_threat %>%
+  mutate(category = case_when(
+    grepl(paste0(paste(left_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "left_news",
+    grepl(paste0(paste(leanleft_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "leanleft_news",
+    grepl(paste0(paste(center_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "center_news",
+    grepl(paste0(paste(leanright_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "leanright_news",
+    grepl(paste0(paste(right_news_keywords, collapse = "|")), domain, ignore.case = TRUE) ~ "right_news",
+    TRUE ~ NA_character_
+  ))
+```
+
+```{r}
+left_news <- join_survey_data_threat_cat |> 
+  filter(category == "left_news") |> 
+  select(domain) |> 
+  unique()
+
+leanleft_news <- join_survey_data_threat_cat  |> 
+  filter(category == "leanleft_news")  |> 
+  select(domain) |> 
+  unique()
+
+center_news <- join_survey_data_threat_cat|> 
+  filter(category == "center_news") |> 
+  select(domain) |> 
+  unique()
+
+leanright_news <- join_survey_data_threat_cat |> 
+  filter(category == "leanright_news") |> 
+  select(domain) |> 
+  unique()
+
+right_news <- join_survey_data_threat_cat |> 
+  filter(category == "right_news") |> 
+  select(domain) |> 
+  unique()
+
+# We checked the domains grouped by the category, and we found 6 domains that are not news wesites: invox community, google translate, question pro, business insider, transformation insider and time.rmprod.zone. We want to delete them.
+
+# domains to change 
+domains_to_change <- c("univoxcommunity.com", "translate.google.com", "questionpro.com", "businessinsider.com", "transformationinsider.com", "time.rmprod.zone")
+
+join_survey_data_threat_cat_new <- join_survey_data_threat_cat %>%
+  mutate(category = ifelse(domain %in% domains_to_change, NA, category))
+
+
+# We need to filter our dataset only keeping the relevant web activities.
+combined_news <- bind_rows(
+  left_news,
+  leanleft_news,
+  center_news,
+  leanright_news,
+  right_news
+)
+
+join_survey_data_threat_cat_filt <- join_survey_data_threat_cat_new %>%
+  filter(domain %in% combined_news$domain)
+```
+<br>
+
+------------------------------------------------------------------------
+
+### Tables
+```{r}
+# We now want to do a table to compare, within our online news, the 20 most visited online news websites by the perception of Russia as a threat
+domain_visits <- join_survey_data_threat_cat_filt %>%
+  filter(!is.na(category)) %>%
+  group_by(dummy_threat, domain, category) %>%
+  summarise(visit_count = n(), .groups = 'drop') %>%
+  arrange(dummy_threat, desc(visit_count))
+
+top_no_threat <- domain_visits %>%
+  filter(dummy_threat == 0) %>%
+  slice_head(n = 20)
+
+top_threat <- domain_visits %>%
+  filter(dummy_threat == 1) %>%
+  slice_head(n = 20)
+
+# Create and save the table for dummy_threat == 0
+table_no_threat <- knitr::kable(
+  top_no_threat,
+  format = "markdown",
+  caption = "Top 20 Domains with No Threat Perceived"
+)
+
+# Creating a table for top_threat
+table_threat <- knitr::kable(
+  top_threat,
+  format = "markdown",
+  caption = "Top 20 Domains with Threat Perceived"
+)
+
+# Display the tables
+table_no_threat
+table_threat
+
+```
+
+```{r}
+#We first do a table of the difference of mean duration soent on the domains between the group which does`t consider Russia as a threat and the group which considers Russia as a threat
+no_threat_perceived <- join_survey_data_threat_cat_filt %>%
+  filter(dummy_threat == 0) %>%
+  group_by(category) %>%
+  summarise(no_threat_perceived = mean(duration, na.rm = TRUE))
+
+threat_perceived <- join_survey_data_threat_cat_filt %>%
+  filter(dummy_threat == 1) %>%
+  group_by(category) %>%
+  summarise(threat_perceived = mean(duration, na.rm = TRUE))
+
+dummy_threat_0 <- join_survey_data_threat_cat_filt %>%
+  filter(dummy_threat == 0) %>%
+  group_by(category) %>%
+  summarise(no_threat_perceived = mean(duration))
+
+dummy_threat_1 <- join_survey_data_threat_cat_filt %>%
+  filter(dummy_threat == 1) %>%
+  group_by(category) %>%
+  summarise(threat_perceived = mean(duration))
+
+comparison_mean <- merge(no_threat_perceived, threat_perceived, by = "category", all = TRUE)
+mean_duration <- comparison_mean
+
+#We put the results of mean duration we have under the shape of a table
+table_mean <- knitr::kable(
+  mean_duration,
+  format = "markdown",
+  col.names = c("Category", "No Threat Perceived", "Threat Perceived"),
+  align = "lcc", 
+  caption = "Mean Duration of use of online news by Category and Threat Perception" 
+)
+
+writeLines(table_mean, "table.txt")
+
+table_mean
+```
+
+```{r}
+#We now do the same thing for the variable counting the number of visits instead of the mean duration, that we once again compare between no threat perceived and threat oerceived 
+visit_count <- join_survey_data_threat_cat_filt %>%
+  group_by(category, dummy_threat) %>%
+  summarise(visit_count = n(), .groups = "drop")
+
+visit_count_comparison <- visit_count %>%
+  pivot_wider(names_from = dummy_threat, values_from = visit_count) %>%
+  rename(`No Threat Perceived` = `0`, `High Threat Perceived` = `1`) %>%
+  select(category, `No Threat Perceived`, `High Threat Perceived`) %>%
+  arrange(category)
+
+table_count <- knitr::kable(
+  visit_count_comparison,
+  format = "markdown",
+  col.names = c("Category", "No Threat Perceived", "Threat Perceived"),
+  align = "lcc", 
+  caption = "Mean Duration by Category and Threat Perception"  
+)
+
+writeLines(table_count, "table.txt")
+
+table_count
+```
+<br>
+
+------------------------------------------------------------------------
+
+### Plot
+```{r}
+long_format <-  visit_count_comparison |> 
+  pivot_longer(cols = c(`No Threat Perceived`, `High Threat Perceived`), 
+               names_to = "High Threat Perceived", values_to = "Count") |> 
+   filter(!is.na(category))
+
+long_format <- long_format |>  
+  mutate(ggorder = case_when(
+  category == "left_news" ~ 1,
+  category == "leanleft_news" ~ 2,
+  category == "center_news" ~ 3, 
+  category == "leanright_news" ~ 4,
+  category == "right_news" ~ 5,
+  TRUE ~ NA_real_))
+  
+# We create an histogram showing the visit count comparison by category and threat perception
+barplot <- ggplot(long_format, aes(x = reorder(category, ggorder), y = Count, fill = `High Threat Perceived`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("No Threat Perceived" = "steelblue2", "High Threat Perceived" = "steelblue4")) + # Custom colors
+  theme_minimal() +
+  labs(title = "Visit Count Comparison by Category and Threat Perception",
+       x = "Category",
+       y = "Visit Count",
+       fill = "Threat Perception") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+barplot
+```
+
+
+

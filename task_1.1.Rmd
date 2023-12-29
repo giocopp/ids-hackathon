@@ -1,0 +1,138 @@
+---
+title: |
+  Hackathon 2023 \
+  Task 1.1
+author: |
+  Author: Giorgio Coppola \
+  Email: g.coppola@students.hertie-school.org \
+  Group: Armande Aboudrar-Meda, Giorgio Coppola, Giulia Petrilli, Luca Vellage
+date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    highlight: tango
+    number_sections: no
+    theme: cosmo
+    toc: no
+  pdf_document:
+    toc: no
+---
+
+```{=html}
+<style>
+div.answer {background-color:#f3f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      error = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = NA)
+
+options(scipen = 999)
+```
+
+```{r, include = F}
+pacman::p_load(tidyverse, leaflet, tigris, sf, haven, RColorBrewer)
+```
+
+<br>
+
+------------------------------------------------------------------------
+
+## Subtask 1 - Interactive map of survey entries
+
+Create an interactive leaflet map divided by inputstates that are colored in relation to a total number of survey responses across all waves, following good practice of visualization. For this plot, you should:
+
+• employ a color palette based on the number range of survey entries.
+
+• use the OpenStreetMap.Mapnik provider tile.
+
+• create a popup that reads “Total survey responses for {inputstate initials}: {Number}”.
+
+• add a color legend with a title.
+
+<br>
+
+**Load data**
+```{r}
+survey_data <- readRDS("./survey/meof_usa_survey_df.rds")
+survey_data <- haven::as_factor(survey_data) 
+```
+
+**Get geodata for US**
+```{r, echo = TRUE, results = 'hide'}
+# get geodata for the US state we are interested into
+states_sf <- tigris::states(cb = TRUE, class = "sf")
+```
+
+**Get number of responses for each each state**
+```{r}
+# filter the rows in the states_sf data frame based on whether the values in the 
+# "NAME" column are present in the unique_states vector (matching state_sf with unique_States)
+unique_states <- unique(survey_data$inputstate)
+states_sf <- states_sf[states_sf$NAME %in% unique_states, ] 
+
+# get the number of responses for each state
+survey_data_map <- survey_data |> 
+  group_by(inputstate) |> 
+  summarize(num_responses = n()) # assuming that each row is a unique response
+
+# check if the number of responses match:
+# sum(survey_data_map$num_responses)
+# the number should be equal to the number of observations in the original dataset,
+#  and it is: both are 10200 (number of rows).
+```
+
+**Add percentages**
+```{r}
+# add percentage of responses to the survey_data_map
+total_responses <- sum(survey_data_map$num_responses)
+survey_data_map <- survey_data_map |> 
+  mutate(percentage = round((num_responses / total_responses) * 100, 2))
+
+# join map data with spatial data (including percentages)
+map_df <- left_join(states_sf, survey_data_map, by = c("NAME" = "inputstate"))
+map_df <- st_transform(map_df, crs = 4326) # solve warning
+```
+
+**Create map**
+```{r}
+# create a color palette function based on the range of num_responses
+max <- max(map_df$num_responses)
+min <- min(map_df$num_responses)
+
+bins <- c(min, 20, 50, 100, 200, 400, 600, 800, max)
+pal <- colorBin("YlGn", domain = map_df$num_responses, bins = bins)
+
+# Create the leaflet map
+map <- leaflet(map_df) %>% 
+  setView(lng = -95.7129, lat = 37.0902, zoom = 2.5) %>% 
+  addProviderTiles(providers$OpenStreetMap.Mapnik) %>% 
+  addPolygons(
+    fillColor = ~pal(num_responses),
+    weight = 0.8,
+    opacity = 2,
+    color = "lightgrey",
+    dashArray = "NULL",
+    fillOpacity = 0.7,
+    popup = ~paste("Total survey responses for", NAME, ":", num_responses, 
+                   "<br>Percentage of Total:", sprintf("%.2f%%", percentage))) |> 
+  addLegend(
+    pal = pal, 
+    values = ~num_responses, 
+    opacity = 0.7, 
+    title = "Number of Responses",
+    position = "bottomright")
+```
+
+**Visualize map**
+```{r, fig.show="hold", out.width="85%", fig.align="center", warning=F, echo=F}
+map
+```
+
+<br>

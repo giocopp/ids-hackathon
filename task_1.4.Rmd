@@ -1,0 +1,219 @@
+---
+title: "Hackathon Project - Task 1.4"
+author: |
+  Author: Luca Vellage \
+  Email: l.Vellage@students.hertie-school.org \
+  Group: Armande Aboudrar-Meda, Giorgio Coppola, Varvara Ilyina, Giulia Petrilli & Luca Vellage
+date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    highlight: tango
+    number_sections: no
+    theme: cosmo
+    toc: no
+  pdf_document:
+    toc: no
+---
+
+```{=html}
+<style>
+div.answer {background-color:#f3f0ff; border-radius: 5px; padding: 20px;}
+</style>
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      error = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = NA)
+
+options(scipen = 999)
+```
+
+------------------------------------------------------------------------
+
+```{r, include = T}
+library(tidyverse)
+library(dplyr)
+library(haven)
+library(gt)
+library(gtExtras)
+```
+
+<br>
+
+## Task: 
+
+### **Perceived hatefulness of social media post**
+
+Create a gt/gtExtras table that reports the aggregated perceived hatefulness of a set of social media posts, following good practice of visualization. For this task, consider the following:
+
+* Some guidance for the data preparation:
++ The content of the social media posts is stored in two types of variables:
+vig_{x}_topic and vig_{x}_sender_message. Every respondent evaluated 8 different messages, which is why x goes from 1 to 8. The perception of hatefulness is stored in the variables vig_{x}_hateful.
++ Drop observations where vig_1_hateful is missing.
++ Recode the vig_{x}_topic variables according to the following scheme: gender = "Women", ideologydems = "Democrats", ideologyreps = "Republicans", muslim = "Muslim immigrants".
++ Construct the full content of the message by pasting together the strings of the recoded vig_{x}_topic and vig_{x}_sender_message variables. For instance, one of the full messages reads: “Republicans should be stopped from spreading falsehoods.”
++ For the evaluation, you should average across all evaluated vignettes across all responses, i.e. your unit of analysis is vignettes, not respondents.
+
+* Your table should contain the following information: (1) The message text, (2) the mean and standard deviation of the hatefulness rating by message, and (3) abarplot displaying the distribution of hatefulness ratings 1 to 5 per message.
+
+* The average hatefulness column should be colored by value.
+
+* The table should provide a meaningful title and description, making it a
+standalone product that speaks for itself.
+
+------------------------------------------------------------------------
+
+**Loading Data and Selecting Relevant Variables:**
+```{r}
+meof_usa_survey_df <- read_rds("./survey/meof_usa_survey_df.RDS")
+
+meof_usa_survey_df_1.4 <- meof_usa_survey_df |> 
+  select(vig_1_topic, vig_2_topic, vig_3_topic, vig_4_topic, vig_5_topic, vig_6_topic, vig_7_topic, vig_8_topic, 
+         vig_1_sender_message, vig_2_sender_message, vig_3_sender_message, vig_4_sender_message, vig_5_sender_message,
+         vig_6_sender_message, vig_7_sender_message, vig_8_sender_message, 
+         vig_1_hateful, vig_2_hateful, vig_3_hateful, vig_4_hateful, vig_5_hateful, vig_6_hateful, vig_7_hateful, vig_8_hateful)
+```
+
+**Cleaning and Prepating Data:**
+```{r}
+
+num_vig_groups <- 8
+#Function for recoding variable categories
+recode_categories <- function(x) {
+  recode(x,
+         "gender" = "Women",
+         "ideologydems" = "Democrats",
+         "ideologyreps" = "Republicans",
+         "muslim" = "Muslim immigrants")
+}
+
+#Clean Dataset
+meof_usa_survey_df_1.4_clean <- meof_usa_survey_df_1.4 |> 
+  
+#Filter missing observations in vig_1_hateful  
+  filter(!is.na(vig_1_hateful)) |> 
+
+#Recode variable categories by applying function
+  mutate(across(c(vig_1_topic:vig_8_topic),recode_categories)) |> 
+
+#Paste posts together     
+  mutate(vig_1_fullpost = paste(vig_1_topic, vig_1_sender_message, sep = " "), 
+        vig_2_fullpost = paste(vig_2_topic, vig_2_sender_message, sep = " "), 
+        vig_3_fullpost = paste(vig_3_topic, vig_3_sender_message, sep = " "), 
+        vig_4_fullpost = paste(vig_4_topic, vig_4_sender_message, sep = " "), 
+        vig_5_fullpost = paste(vig_5_topic, vig_5_sender_message, sep = " "),
+        vig_6_fullpost = paste(vig_6_topic, vig_6_sender_message, sep = " "), 
+        vig_7_fullpost = paste(vig_7_topic, vig_7_sender_message, sep = " "), 
+        vig_8_fullpost = paste(vig_8_topic, vig_8_sender_message, sep = " "))
+
+#Select variables that are relevant for the analysis 
+meof_usa_survey_df_1.4_analysis <- meof_usa_survey_df_1.4_clean |> 
+  select(
+    vig_1_fullpost, vig_2_fullpost, vig_3_fullpost, vig_4_fullpost, vig_5_fullpost, vig_6_fullpost, vig_7_fullpost, vig_8_fullpost,
+    vig_1_hateful, vig_2_hateful, vig_3_hateful, vig_4_hateful, vig_5_hateful, vig_6_hateful, vig_7_hateful, vig_8_hateful)
+
+```
+
+**Changing Dataset Structure:**
+Concept: Change level of analysis from respondent to message
+```{r}
+#Change dataset structure by using pivotlonger 
+meof_usa_survey_df_1.4_analysis_long <- meof_usa_survey_df_1.4_analysis |> 
+  pivot_longer(
+    cols = contains("fullpost"), 
+    names_to = "vignette", 
+    values_to = "quote"
+  ) |> 
+  
+#Transform rating variable into numeric 
+  mutate(
+     across(contains("hateful"), ~ as.numeric(zap_labels(.)))) |> 
+  
+#Keep only the relevant observations 
+  mutate(
+    vig_1_hateful = case_when(vignette == "vig_1_fullpost" ~ vig_1_hateful, TRUE ~ NA_real_),
+    vig_2_hateful = case_when(vignette == "vig_2_fullpost" ~ vig_2_hateful, TRUE ~ NA_real_),
+    vig_3_hateful = case_when(vignette == "vig_3_fullpost" ~ vig_3_hateful, TRUE ~ NA_real_),
+    vig_4_hateful = case_when(vignette == "vig_4_fullpost" ~ vig_4_hateful, TRUE ~ NA_real_), 
+    vig_5_hateful = case_when(vignette == "vig_5_fullpost" ~ vig_5_hateful, TRUE ~ NA_real_),
+    vig_6_hateful = case_when(vignette == "vig_6_fullpost" ~ vig_6_hateful, TRUE ~ NA_real_),
+    vig_7_hateful = case_when(vignette == "vig_7_fullpost" ~ vig_7_hateful, TRUE ~ NA_real_),
+    vig_8_hateful = case_when(vignette == "vig_8_fullpost" ~ vig_8_hateful, TRUE ~ NA_real_)) |> 
+  
+  #Rename values in the Vignette column
+  mutate(vignette = 
+    str_remove(vignette, "_fullpost")) |> 
+  
+#Create one rating column
+  mutate(
+    rating = coalesce(vig_1_hateful, 
+                      vig_2_hateful, 
+                      vig_3_hateful, 
+                      vig_4_hateful, 
+                      vig_5_hateful, 
+                      vig_6_hateful, 
+                      vig_7_hateful, 
+                      vig_8_hateful)) |> 
+  
+#Select only the variables relevant for the analysis 
+  select(vignette, quote, rating) |> 
+
+#Give unique ID 
+  mutate(ID = row_number())
+```
+
+**Creating Aggregate Data:**
+```{r}
+#Create aggregate data
+aggregate_var_new <- meof_usa_survey_df_1.4_analysis_long |> 
+  group_by(quote) |> 
+  summarise(mean_rating = round(mean(rating, na.rm = TRUE), digits = 2), 
+            std_dev_rating = round(sd(rating, na.rm = TRUE), digits = 2), 
+            respondent_rating = list(rating), .groups = "drop") 
+```
+
+**Creating Table with Plots using gt() and gtExtras():**
+```{r}
+#Create gt table with plot
+aggregate_var_new |> 
+  gt() |> 
+  gt_color_rows(mean_rating, domain = c(1, 5)) |> 
+  gt_plt_dist(respondent_rating, type = "histogram", bw = 1, line_color = "black", fill_color = "darkgrey") |> 
+  
+  tab_header(
+    title = "Aggregated Perceived Hatefulness of Social Media Posts",
+    subtitle = "Vignette Experiment: Respondents rated 8 different social media posts according to their hatefulness on a scale from 1-5. The table summarizes the mean and standard deviation across all hatefulness ratings and shows the distribution of hatefulness ratings per post.") |> 
+  
+  tab_footnote(
+    footnote = "Source: Media Exposure and Opinion Formation (MEOF)"
+  ) |> 
+
+  tab_options(heading.align = "left", 
+              heading.title.font.size = 25,
+              heading.subtitle.font.size = 13) |> 
+  
+  cols_label(
+    quote = "Message",
+    mean_rating = "Mean", 
+    std_dev_rating = "Standard Deviation", 
+    respondent_rating = "Distribution") |> 
+ 
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")),
+    locations = cells_column_labels(columns = everything()))
+
+```
+<br>
+
+Note: Some of the messages used in the Vignette experiment are very similar in spelling and essentially equivalent in meaning. Examples are "Democrats are a stupid animal" and "Democrats are stupid animals". In these cases, the descriptive statistics are, as expected, very similar. Therefore, the phrasing of the messages has **not** been changed for the analysis.
+
+
+
+
